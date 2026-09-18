@@ -8,7 +8,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 // Paste your Mapbox public token here
-mapboxgl.accessToken = 'YOUR_MAPBOX_PUBLIC_TOKEN_HERE';
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || 'YOUR_MAPBOX_PUBLIC_TOKEN_HERE';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000';
 
@@ -40,6 +40,15 @@ export default function App() {
       loadProjects();
     }
   };
+
+  // attach token to axios defaults
+  useEffect(() => {
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete axios.defaults.headers.common['Authorization'];
+    }
+  }, [token]);
 
   const loadProjects = async () => {
     const res = await axios.get(`${API_BASE}/projects`);
@@ -81,6 +90,49 @@ export default function App() {
         alert('Site polygon saved to project!');
       } else {
         alert('Select a project from the left panel first to attach this site!');
+      }
+    });
+
+    // load existing sites and add to map
+    map.current.on('load', async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/sites`);
+        const features = res.data.map(s => ({
+          type: 'Feature',
+          properties: { id: s.id, name: s.name, project_id: s.project_id },
+          geometry: s.geometry
+        }));
+        if (map.current.getSource('sites')) {
+          map.current.getSource('sites').setData({ type: 'FeatureCollection', features });
+        } else {
+          map.current.addSource('sites', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+          map.current.addLayer({
+            id: 'sites-fill',
+            type: 'fill',
+            source: 'sites',
+            paint: { 'fill-color': '#10b981', 'fill-opacity': 0.4 }
+          });
+          map.current.addLayer({
+            id: 'sites-line',
+            type: 'line',
+            source: 'sites',
+            paint: { 'line-color': '#065f46', 'line-width': 2 }
+          });
+
+          map.current.on('click', 'sites-fill', async (e) => {
+            const feature = e.features[0];
+            const siteId = feature.properties.id;
+            const analyticsRes = await axios.get(`${API_BASE}/sites/${siteId}/analytics`);
+            setAnalytics(analyticsRes.data);
+            // center map on clicked feature
+            if (feature.geometry && feature.geometry.type === 'Polygon') {
+              const coords = feature.geometry.coordinates[0][0];
+              map.current.flyTo({ center: [coords[0], coords[1]], zoom: 12 });
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load sites', err);
       }
     });
   }, [token, selectedProject]);
