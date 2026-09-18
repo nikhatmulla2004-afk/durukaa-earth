@@ -10,7 +10,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 // Paste your Mapbox public token here
 mapboxgl.accessToken = 'YOUR_MAPBOX_PUBLIC_TOKEN_HERE';
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000';
 
 export default function App() {
   const [token, setToken] = useState(null);
